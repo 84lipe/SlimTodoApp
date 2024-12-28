@@ -5,7 +5,7 @@ Since this is a simple application I kept everything in a single project.
 
 Things to add to the application:
 
-- [ ] Create tests
+- [x] Create tests
 - [ ] Task details funcionality
 - [ ] Multiple lists
 - [ ] Clone tasks

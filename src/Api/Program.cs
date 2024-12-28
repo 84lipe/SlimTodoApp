@@ -85,3 +85,4 @@ app.MapPatch("/todos/{id}/complete", (TodoContext context, Guid id) =>
 .WithOpenApi();
 
 app.Run();
+public partial class Program { }
