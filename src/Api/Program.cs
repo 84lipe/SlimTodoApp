@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Query;
 using SlimTodoApp.Api.Application.Requests;
 using SlimTodoApp.Api.Data;
 using SlimTodoApp.Api.Domain.Models;
@@ -37,6 +39,42 @@ app.MapGet("/todos", (TodoContext context) =>
     return result;
 })
 .WithName("GetAllTodos")
+.WithOpenApi();
+
+app.MapPost("/todos/filter", (TodoContext context, GetTodosByFilterRequest filter) => 
+{
+    var query = context.Todos.AsNoTracking();
+
+    if (!string.IsNullOrEmpty(filter.Title))
+    {
+        query = query.Where(t => t.Title.Contains(filter.Title));
+    }
+
+    if (filter.DateFrom is not null)
+    {
+        query = query.Where(t => t.Created >= filter.DateFrom);
+    }
+
+    if (filter.DateTo is not null)
+    {
+        query = query.Where(t => t.Created <= filter.DateTo);
+    }
+
+    if (filter.Completed is not null)
+    {
+        query = query.Where(t => t.Completed == filter.Completed);
+    }
+
+    var result = query.ToList();
+
+    if (result is not { Count: > 0})
+    {
+        return Enumerable.Empty<Todo>();
+    }
+
+    return result;
+})
+.WithName("GetTodosByFilter")
 .WithOpenApi();
 
 app.MapGet("/todos/{id}", (TodoContext context, Guid id) => 

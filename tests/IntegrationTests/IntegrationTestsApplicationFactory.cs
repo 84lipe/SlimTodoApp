@@ -24,11 +24,8 @@ public class IntegrationTestsApplicationFactory : WebApplicationFactory<Program>
 
             var provider = services.BuildServiceProvider();
 
-            // using var scope = provider.CreateScope();
-            // var context = scope.ServiceProvider.GetRequiredService<TodoContext>();
-            
-            //context.Database.EnsureCreated();
             var context = provider.GetRequiredService<TodoContext>();
+            context.Database.EnsureDeleted();
             context.Database.Migrate();
         });
 
