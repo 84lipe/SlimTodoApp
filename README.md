@@ -6,8 +6,8 @@ Since this is a simple application I kept everything in a single project.
 Things to add to the application:
 
 - [x] Create tests
-- [x] Filter tasks by title, date and completed status (ongoing)
-- [ ] Task details functionality
+- [x] Filter tasks by title, date and completed status
+- [ ] Task details functionality (ongoing)
 - [ ] Multiple lists
 - [ ] Clone tasks
 - [ ] Delete tasks
