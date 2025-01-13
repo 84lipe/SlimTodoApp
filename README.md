@@ -7,7 +7,7 @@ Things to add to the application:
 
 - [x] Create tests
 - [x] Filter tasks by title, date and completed status
-- [ ] Task details functionality (ongoing)
+- [x] Task details functionality
 - [ ] Multiple lists
 - [ ] Clone tasks
 - [ ] Delete tasks
