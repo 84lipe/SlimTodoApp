@@ -6,13 +6,18 @@ using SlimTodoApp.Api.Domain.Models;
 
 namespace SlimTodoApp.IntegrationTests;
 
+[Collection("DbCollection")]
 public class ApiTests : IClassFixture<IntegrationTestsApplicationFactory>
 {
-    private readonly IntegrationTestsApplicationFactory _factory;
+    private readonly HttpClient _client;
+    private readonly TodoContext _context;
+    private readonly IServiceScope _scope;
 
     public ApiTests(IntegrationTestsApplicationFactory factory)
     {
-        _factory = factory;
+        _scope = factory.Services.CreateScope();
+        _context = _scope.ServiceProvider.GetRequiredService<TodoContext>();
+        _client = factory.CreateClient();
     }
 
     [Fact]
@@ -20,43 +25,39 @@ public class ApiTests : IClassFixture<IntegrationTestsApplicationFactory>
     {
         // Given
         int totalTodos = 5;
-        using var scope = _factory.Services.CreateScope();
-        var client = _factory.CreateClient();
-        var context = scope.ServiceProvider.GetRequiredService<TodoContext>();
+
+        List<Todo> todosToAdd = new(totalTodos);
 
         for (int i = 0; i < totalTodos; i++)
         {
-            context.Todos.Add(new Todo($"task num {i + 1}"));
+            todosToAdd.Add(new Todo($"task num {i + 1}"));
         }
-
-        context.SaveChanges();
+        
+        _context.AddRange(todosToAdd);
+        _context.SaveChanges();
 
         // When
-        var result = await client.GetAsync("/todos");
+        var result = await _client.GetAsync("/todos");
 
         // Then
         Assert.True(result.IsSuccessStatusCode);
         var content = await result.Content.ReadFromJsonAsync<IEnumerable<Todo>>();
 
         Assert.NotNull(content);
-        var savedTodos = context.Todos.Count();
-        Assert.Equal(savedTodos, content!.Count());
+        Assert.Contains(content, x => todosToAdd.Any(t => t.Id == x.Id));
     }
 
     [Fact]
     public async Task GivenTodoExist_WhenIdIsRequested_ThenReturTodoAndStatusOk()
     {
         // Given
-        using var scope = _factory.Services.CreateScope();
-        var client = _factory.CreateClient();
-        var context = scope.ServiceProvider.GetRequiredService<TodoContext>();
         var todo = new Todo("A very specific task");
 
-        context.Todos.Add(todo);
-        context.SaveChanges();
+        _context.Todos.Add(todo);
+        _context.SaveChanges();
 
         // When
-        var result = await client.GetAsync($"/todos/{todo.Id}");
+        var result = await _client.GetAsync($"/todos/{todo.Id}");
 
         // Then
         Assert.True(result.IsSuccessStatusCode);
@@ -65,47 +66,45 @@ public class ApiTests : IClassFixture<IntegrationTestsApplicationFactory>
         Assert.Equal(todo.Id, content.Id);
     }
 
-    [Fact]
-    public async Task GivenValidCreateTaskRequest_WhenRequestReceived_ThenCreateNewTaskAndReturnCreatedStatus()
+    [Theory]
+    [InlineData("Buy coffee", null)]
+    [InlineData("Buy coffee", "If the price is good, buy two packages")]
+    public async Task GivenValidCreateTaskRequest_WhenRequestReceived_ThenCreateNewTaskAndReturnCreatedStatus(string title, string? body)
     {
         // Given
-        using var scope = _factory.Services.CreateScope();
-        var client = _factory.CreateClient();
-        var context = scope.ServiceProvider.GetRequiredService<TodoContext>();
-
-        var requestBody = new CreateTaskRequest { Title = "Buy coffee" };
+        var requestBody = new CreateTaskRequest(title, body!);
 
         // When
-        var result = await client.PostAsync("/todos", CreateRequestBody(requestBody));
+        var result = await _client.PostAsync("/todos", CreateRequestBody(requestBody));
 
         // Then
         Assert.True(result.IsSuccessStatusCode);
         Assert.Equal(StatusCodes.Status201Created, (int)result.StatusCode);
-        var createdTask = context.Todos.FirstOrDefault(x => x.Title == requestBody.Title);
-        Assert.NotNull(createdTask);
+        
+        var content = await result.Content.ReadFromJsonAsync<Todo>();
+        Assert.NotNull(content);
+
+        var createdTodo = _context.Todos.FirstOrDefault(x => x.Id == content.Id);
+        Assert.NotNull(createdTodo);
     }
 
     [Fact]
     public async Task GivenRequestExists_WhenCompletionIsRequested_ThenUpdateStatusAndReturnNoContent()
     {
         // Given
-        using var scope = _factory.Services.CreateScope();
-        var client = _factory.CreateClient();
-        var context = scope.ServiceProvider.GetRequiredService<TodoContext>();
-
         var todo = new Todo("Almost done... Done!");
 
-        context.Todos.Add(todo);
-        context.SaveChanges();
-        context.ChangeTracker.Clear();
+        _context.Todos.Add(todo);
+        _context.SaveChanges();
+        _context.ChangeTracker.Clear();
 
         // When
-        var result = await client.PatchAsync($"/todos/{todo.Id}/complete", null);
+        var result = await _client.PatchAsync($"/todos/{todo.Id}/complete", null);
 
         // Then
         Assert.True(result.IsSuccessStatusCode);
         Assert.Equal(StatusCodes.Status204NoContent, (int)result.StatusCode);
-        var completedTask = context.Todos.First(x => x.Id == todo.Id);
+        var completedTask = _context.Todos.First(x => x.Id == todo.Id);
         Assert.True(completedTask.Completed);
     }
 
@@ -114,23 +113,28 @@ public class ApiTests : IClassFixture<IntegrationTestsApplicationFactory>
     public async Task GivenListOfTodosExist_WhenFilterRequestIsReceived_ThenReturnMatchingTodosAndStatusOk(GetTodosByFilterRequest filter, int expectedCount)
     {
         // Given
-        using var scope = _factory.Services.CreateScope();
-        var client = _factory.CreateClient();
-        var context = scope.ServiceProvider.GetRequiredService<TodoContext>();
+        List<Todo> testData = new(6);
 
         for (int i = 0; i < 5; i++)
         {
-            context.Todos.Add(new Todo($"task num {i + 1}"));
+            var todo = new Todo($"task num {i + 1}");
+
+            if (i % 2 == 0)
+            {
+                todo.AddBody($"body_{i + 1}");
+            }
+            testData.Add(todo);
         }
 
         var completedTodo = new Todo("This is done");
         completedTodo.Complete();
-        context.Todos.Add(completedTodo);
+        testData.Add(completedTodo);
 
-        context.SaveChanges();
+        _context.Todos.AddRange(testData);
+        _context.SaveChanges();
 
         // When
-        var result = await client.PostAsync("/todos/filter", CreateRequestBody(filter));
+        var result = await _client.PostAsync("/todos/filter", CreateRequestBody(filter));
 
         // Then
         Assert.True(result.IsSuccessStatusCode);
@@ -138,15 +142,16 @@ public class ApiTests : IClassFixture<IntegrationTestsApplicationFactory>
 
         Assert.NotNull(content);
         Assert.Equal(expectedCount, content.Count());
-        context.Todos.RemoveRange(context.Todos);
-        context.SaveChanges();
+
+        _context.Todos.RemoveRange(testData);
+        _context.SaveChanges();
     }
 
     public static IEnumerable<object[]> CreateFilterRequests()
     {
         var filter = new GetTodosByFilterRequest
         {
-            Title = "3"
+            Text = "task num 3"
         };
         int expectedCount = 1;
         yield return new object[] { filter, expectedCount };
@@ -161,6 +166,10 @@ public class ApiTests : IClassFixture<IntegrationTestsApplicationFactory>
 
         filter = new GetTodosByFilterRequest { DateTo = DateTime.Now.AddHours(-1) };
         expectedCount = 0;
+        yield return new object[] { filter, expectedCount };
+
+        filter = new GetTodosByFilterRequest { Text = "body_" };
+        expectedCount = 3;
         yield return new object[] { filter, expectedCount };
     }
 

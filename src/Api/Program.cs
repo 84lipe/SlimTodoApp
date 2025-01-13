@@ -1,6 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Query;
 using SlimTodoApp.Api.Application.Requests;
 using SlimTodoApp.Api.Data;
 using SlimTodoApp.Api.Domain.Models;
@@ -45,9 +43,10 @@ app.MapPost("/todos/filter", (TodoContext context, GetTodosByFilterRequest filte
 {
     var query = context.Todos.AsNoTracking();
 
-    if (!string.IsNullOrEmpty(filter.Title))
+    if (!string.IsNullOrEmpty(filter.Text))
     {
-        query = query.Where(t => t.Title.Contains(filter.Title));
+        query = query.Where(t => t.Title.Contains(filter.Text) ||
+        (t.Body != null && t.Body.Contains(filter.Text)));
     }
 
     if (filter.DateFrom is not null)
@@ -94,6 +93,7 @@ app.MapGet("/todos/{id}", (TodoContext context, Guid id) =>
 app.MapPost("/todos", (TodoContext context, CreateTaskRequest request) => 
 {
     var todo = new Todo(request.Title);
+    todo.AddBody(request.Body);
 
     context.Todos.Add(todo);
 
